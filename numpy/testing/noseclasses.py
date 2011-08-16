@@ -17,12 +17,8 @@ import numpy
 from nosetester import get_package_name
 import inspect
 
-_doctest_ignore = ['generate_numpy_api.py', 'scons_support.py',
-                   'setupscons.py', 'setup.py']
-
 # Some of the classes in this module begin with 'Numpy' to clearly distinguish
 # them from the plethora of very similar names from nose/unittest/doctest
-
 
 #-----------------------------------------------------------------------------
 # Modified version of the one in the stdlib, that fixes a python bug (doctests
@@ -65,8 +61,6 @@ class NumpyDocTestFinder(doctest.DocTestFinder):
             return True # [XX] no way not be sure.
         else:
             raise ValueError("object must be a class or function")
-
-
 
     def _find(self, tests, obj, name, module, source_lines, globs, seen):
         """
@@ -115,27 +109,6 @@ class NumpyDocTestFinder(doctest.DocTestFinder):
                     valname = '%s.%s' % (name, valname)
                     self._find(tests, val, valname, module, source_lines,
                                globs, seen)
-
-
-class NumpyDocTestCase(npd.DocTestCase):
-    """Proxy for DocTestCase: provides an address() method that
-    returns the correct address for the doctest case. Otherwise
-    acts as a proxy to the test case. To provide hints for address(),
-    an obj may also be passed -- this will be used as the test object
-    for purposes of determining the test address, if it is provided.
-    """
-
-    # doctests loaded via find(obj) omit the module name
-    # so we need to override id, __repr__ and shortDescription
-    # bonus: this will squash a 2.3 vs 2.4 incompatiblity
-    def id(self):
-        name = self._dt_test.name
-        filename = self._dt_test.filename
-        if filename is not None:
-            pk = getpackage(filename)
-            if pk is not None and not name.startswith(pk):
-                name = "%s.%s" % (pk, name)
-        return name
 
 
 # second-chance checker; if the default comparison doesn't
@@ -187,6 +160,24 @@ class NumpyDoctest(npd.Doctest):
     name = 'numpydoctest'   # call nosetests with --with-numpydoctest
     score = 1000 # load late, after doctest builtin
 
+    # Test finder
+    test_finder_class = NumpyDocTestFinder
+
+    # always use whitespace and ellipsis options for doctests
+    doctest_optflags = doctest.NORMALIZE_WHITESPACE | doctest.ELLIPSIS
+
+    # custom doctest class
+    doctest_case_class = NumpyDocTestCase
+
+    # Use custom output checker
+    out_check_class = NumpyOutputChecker
+
+    # files that should be ingored for doctests
+    doctest_ignore = ['generate_numpy_api.py',
+                      'scons_support.py',
+                      'setupscons.py',
+                      'setup.py']
+
     def options(self, parser, env=os.environ):
         Plugin.options(self, parser, env)
 
@@ -194,9 +185,8 @@ class NumpyDoctest(npd.Doctest):
         # parent method sets enabled flag from command line --with-numpydoctest
         Plugin.configure(self, options, config)
         self.doctest_tests = True
-        self.finder = NumpyDocTestFinder()
+        self.finder = self.test_finder_class()
         self.parser = doctest.DocTestParser()
-        self.doctest_result_var = None # default in npd.Doctest
         if self.enabled:
             # Pull standard doctest out of plugin list; there's no reason to run
             # both.  In practice the Unplugger plugin above would cover us when
@@ -204,6 +194,28 @@ class NumpyDoctest(npd.Doctest):
             # someone wants to run our plugin outside the numpy.test() machinery
             config.plugins.plugins = [p for p in config.plugins.plugins
                                       if p.name != 'doctest']
+
+    def _set_test_context(self, test):
+        # set the namespace for tests
+        pkg_name = get_package_name(os.path.dirname(test.filename))
+
+        # Each doctest should execute in an environment equivalent to
+        # starting Python and executing "import numpy as np", and,
+        # for SciPy packages, an additional import of the local
+        # package (so that scipy.linalg.basic.py's doctests have an
+        # implicit "from scipy import linalg" as well.
+        #
+        # Note: __file__ allows the doctest in NoseTester to run
+        # without producing an error
+        test.globs = {'__builtins__':__builtins__,
+                      '__file__':'__main__',
+                      '__name__':'__main__',
+                      'np':numpy}
+        # add appropriate scipy import for SciPy tests
+        if 'scipy' in pkg_name:
+            p = pkg_name.split('.')
+            p2 = p[-1]
+            test.globs[p2] = __import__(pkg_name, test.globs, {}, [p2])
 
     # Turn on whitespace normalization, set a minimal execution context
     # for doctests, implement a "#random" directive to allow executing a
@@ -227,48 +239,22 @@ class NumpyDoctest(npd.Doctest):
                 continue
             if not test.filename:
                 test.filename = module_file
-
-            pkg_name = get_package_name(os.path.dirname(test.filename))
-
-            # Each doctest should execute in an environment equivalent to
-            # starting Python and executing "import numpy as np", and,
-            # for SciPy packages, an additional import of the local
-            # package (so that scipy.linalg.basic.py's doctests have an
-            # implicit "from scipy import linalg" as well.
-            #
-            # Note: __file__ allows the doctest in NoseTester to run
-            # without producing an error
-            test.globs = {'__builtins__':__builtins__,
-                          '__file__':'__main__',
-                          '__name__':'__main__',
-                          'np':numpy}
-
-            # add appropriate scipy import for SciPy tests
-            if 'scipy' in pkg_name:
-                p = pkg_name.split('.')
-                p1 = '.'.join(p[:-1])
-                p2 = p[-1]
-                test.globs[p2] = __import__(pkg_name, test.globs, {}, [p2])
-
-            # always use whitespace and ellipsis options
-            optionflags = doctest.NORMALIZE_WHITESPACE | doctest.ELLIPSIS
-
-            yield NumpyDocTestCase(test,
-                                   optionflags=optionflags,
-                                   checker=NumpyOutputChecker(),
-                                   result_var = self.doctest_result_var)
-
+            # Set test namespace; test altered in place
+            self._set_test_context(test)
+            yield self.doctest_case_class(test,
+                                          optionflags=self.doctest_optflags,
+                                          checker=self.out_check_class(),
+                                          result_var = self.doctest_result_var)
 
     # Add an afterContext method to nose.plugins.doctests.Doctest in order
     # to restore print options to the original state after each doctest
     def afterContext(self):
         numpy.set_printoptions(**print_state)
 
-
     # Ignore NumPy-specific build files that shouldn't be searched for tests
     def wantFile(self, file):
         bn = os.path.basename(file)
-        if bn in _doctest_ignore:
+        if bn in self.doctest_ignore:
             return False
         return npd.Doctest.wantFile(self, file)
 
