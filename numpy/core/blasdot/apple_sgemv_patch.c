@@ -177,6 +177,8 @@ void cblas_sgemv(const enum CBLAS_ORDER order,
  * If memory allocation fails it associates the
  * value (void*)1 with the TLS key tls_memory_error.  
  *
+ * This function will overshadow cblas_sgemv in Accelerate
+ * in the link process.
  *
  */
  
