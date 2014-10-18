@@ -22,18 +22,14 @@ enum CBLAS_TRANSPOSE {CblasNoTrans=111, CblasTrans=112, CblasConjTrans=113};
 /* ----------------------------------------------------------------- */
 /* Management of aligned memory */
 
-pthread_key_t tls_memory_error;
+pthread_key_t tls_memory_error; /* cannot use NPY_TLS on MacOS X */
 static int delete_tls_key = 0;
 
 static void *aligned_malloc(size_t size, int align)
-/* 
- * aligned malloc
- *
- */
+/* aligned malloc */
 {
     void *ptr;
-    if (NPY_UNLIKELY(posix_memalign(&ptr, align, size))) 
-        return NULL;
+    if (NPY_UNLIKELY(posix_memalign(&ptr, align, size))) return NULL;
     return ptr;
 }
 
@@ -42,11 +38,8 @@ static void *aligned_malloc(size_t size, int align)
 static float *aligned_matrix(const enum CBLAS_ORDER order, 
                     const int m, const int n, const float *A, 
                     const int lda)
-/* 
- * Return an aligned copy of matrix A
- * if it is misaligned to 32 byte boundary.
- *
- */
+/* Return an aligned copy of matrix A
+ * if it is misaligned to 32 byte boundary. */
 {       
     float *alignedA;
     int r, c;
@@ -68,11 +61,8 @@ static float *aligned_matrix(const enum CBLAS_ORDER order,
 }
 
 static float *aligned_vector(const float *V, const int n, const int inc) 
-/* 
- * Return an aligned copy of vector V
- * if it is misaligned to 32 byte boundary.
- *
- */ 
+/* Return an aligned copy of vector V
+ * if it is misaligned to 32 byte boundary. */ 
 {
     float *alignedV, *tmp;
     int i;
@@ -108,6 +98,9 @@ static cblas_sgemv_t *accelerate_cblas_sgemv = NULL;
 static int AVX = 0;
 
 static int cpu_supports_avx(void)
+/* Dynamic check for AVX support 
+ * __builtin_cpu_supports("avx") is available in gcc 4.8,
+ * but clang and icc does not currently support it. */
 {
     char tmp[1024];
     FILE *p;
@@ -121,35 +114,31 @@ static int cpu_supports_avx(void)
 
 __attribute__((constructor))
 static void loadlib()
+/* automatically executed on module import */
 {
-    /* TODO: Better error handling than Py_FatalError */
-    
+    /* TODO: Better error handling than Py_FatalError */   
     char errormsg[1024];
     memset((void*)errormsg, 0, sizeof(errormsg));
-    delete_tls_key = 0;
-    
+    delete_tls_key = 0;    
     /* check if the CPU supports AVX */
     AVX = cpu_supports_avx();
     if (AVX < 0) {
         /* Could not determine if CPU supports AVX,
          * assume for safety that it does */
         AVX = 1; 
-    }
-    
+    }    
     /* load vecLib */
     veclib = dlopen(VECLIB_FILE, RTLD_LOCAL | RTLD_FIRST);
     if (!veclib) {
         sprintf(errormsg,"Failed to open vecLib from location '%s'.", VECLIB_FILE);
         Py_FatalError(errormsg); /* calls abort() and dumps core */
     }
-    
     /* resolve cblas_sgemv */
     accelerate_cblas_sgemv = (cblas_sgemv_t*) dlsym(veclib, "cblas_sgemv");
     if (!accelerate_cblas_sgemv) {
         sprintf(errormsg,"Failed to resolve symbol 'cblas_sgemv'.");
         Py_FatalError(errormsg);
     }
-    
     /* create a pthreads key for tls */
     if (pthread_key_create(&tls_memory_error, NULL)) {
         sprintf(errormsg,"Failed to create TLS key.");
@@ -175,7 +164,6 @@ void cblas_sgemv(const enum CBLAS_ORDER order,
                         const float *B, const int incB,
                         const float beta,
                         float *C, const int incC)
-
 /* Patch for the cblas_sgemv segfault in Accelerate: 
  * Aligns all input arrays on 32 byte boundaries, then     
  * calls cblas_sgemv in Accelerate. If AVX is not supported
@@ -185,22 +173,16 @@ void cblas_sgemv(const enum CBLAS_ORDER order,
  * value (void*)1 with the TLS key tls_memory_error.  
  *
  * This function will overshadow cblas_sgemv in Accelerate
- * in the link process.
- *
- */
- 
+ * in the link process. */
 {
     float *alignedA = (float*)A, *alignedB = (float*)B, *alignedC = (float*)C;
     int freeA=0, freeB=0, freeC=0;
     int veclen = (trans == CblasTrans ? m : n);
-    int _incB = incB, _incC = incC, _lda = lda;
-                         
+    int _incB = incB, _incC = incC, _lda = lda;                             
     /* check if arrays are misaligned and the CPU has AVX */
     const int needs_copy = AVX && (BADARRAY(A) || BADARRAY(B) || BADARRAY(C)); 
-              
     /* clear memory error tls value */          
     pthread_setspecific(tls_memory_error, (void*)0);              
-              
     /* Make temporary copies of misaligned arrays if needed. */
     if (needs_copy) {
         /* aligned copy of A if needed */
@@ -224,14 +206,12 @@ void cblas_sgemv(const enum CBLAS_ORDER order,
             _incC = 1;
             freeC = 1;
         }  
-    }
-                
+    }                
     /* Now we can safely call cblas_sgemv from Accelerate. 
      * Arrays are aligned to 32 byte boundaries if the CPU
      * has AVX. */
      accelerate_cblas_sgemv(order, trans, m, n, alpha, alignedA, _lda, 
-                             alignedB, _incB, beta, alignedC, _incC);
-                                                        
+                             alignedB, _incB, beta, alignedC, _incC);                                                        
     /* Clean up temporary arrays if they were made. */
     if (needs_copy) {
         if (freeC) {
