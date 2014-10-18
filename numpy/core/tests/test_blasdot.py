@@ -170,3 +170,34 @@ def test_dot_override():
     assert_equal(c.dot(a), "A")
     assert_raises(TypeError, np.dot, b, c)
     assert_raises(TypeError, c.dot, b)
+    
+    
+def test_npdot_segfault():
+    if sys.platform != 'darwin': return
+    from subprocess import call
+    
+    # Test for float32 np.dot segfault
+    # https://github.com/numpy/numpy/issues/4007
+    
+    # This always segfaults when the sgevm alignment bug is present
+    
+    assert_equal(call([sys.executable, '-c',
+                       '\n'.join([ 'import numpy as np',
+                                   '',
+                                   'def aligned_array(N, align, dtype):',
+                                   '    d = dtype()',
+                                   '    tmp = np.zeros(N * d.nbytes + align, dtype=np.uint8)',
+                                   '    address = tmp.__array_interface__["data"][0]',
+                                   '    for offset in range(align):',
+                                   '        if (address + offset) % align == 0: break',
+                                   '    return tmp[offset:offset+N*d.nbytes].view(dtype=dtype)',
+                                   '',
+                                   'm = aligned_array(100,15,np.float32)',
+                                   's = aligned_array(10000,15,np.float32).reshape(100,100)',
+                                   'np.dot(s,m)'
+                                 ])
+                     ]),
+                 0)
+
+    
+
