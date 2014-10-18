@@ -95,7 +95,7 @@ typedef int cblas_sgemv_t(const enum CBLAS_ORDER order,
                           
 static void *veclib = NULL;
 static cblas_sgemv_t *accelerate_cblas_sgemv = NULL;
-static int AVX = 0;
+static int AVX_and_10_9 = 0;
 
 static int cpu_supports_avx(void)
 /* Dynamic check for AVX support 
@@ -112,12 +112,26 @@ static int cpu_supports_avx(void)
     return (count ? 1 : 0);
 }
 
+static int using_mavericks(void)
+/* Check if we are using MacOS X 10.9 */
+{
+    char tmp[1024];
+    FILE *p;
+    size_t count;
+    p = popen("sw_vers -productVersion | grep 10\\.9\\.", "r");
+    if (p == NULL) return -1;
+    count = fread((void *)&tmp, 1, sizeof(tmp)-1, p);
+    pclose(p);
+    return (count ? 1 : 0);
+}
+
 __attribute__((constructor))
 static void loadlib()
 /* automatically executed on module import */
 {
     /* TODO: Better error handling than Py_FatalError */   
     char errormsg[1024];
+    int AVX, MAVERICKS;
     memset((void*)errormsg, 0, sizeof(errormsg));
     delete_tls_key = 0;    
     /* check if the CPU supports AVX */
@@ -127,6 +141,16 @@ static void loadlib()
          * assume for safety that it does */
         AVX = 1; 
     }    
+    /* check if the OS is MacOS X Mavericks */
+    MAVERICKS = using_mavericks();
+    if (MAVERICKS < 0) {
+        /* Could not determine if the OS is Mavericks,
+         * assume for safety that it is */
+        MAVERICKS = 1; 
+    }
+    /* we need the workaround when the CPU supports 
+     * AVX and the OS version is Mavericks */
+    AVX_and_10_9 = AVX && MAVERICKS;
     /* load vecLib */
     veclib = dlopen(VECLIB_FILE, RTLD_LOCAL | RTLD_FIRST);
     if (!veclib) {
@@ -180,7 +204,7 @@ void cblas_sgemv(const enum CBLAS_ORDER order,
     int veclen = (trans == CblasTrans ? m : n);
     int _incB = incB, _incC = incC, _lda = lda;                             
     /* check if arrays are misaligned and the CPU has AVX */
-    const int needs_copy = AVX && (BADARRAY(A) || BADARRAY(B) || BADARRAY(C)); 
+    const int needs_copy = AVX_and_10_9 && (BADARRAY(A) || BADARRAY(B) || BADARRAY(C)); 
     /* clear memory error tls value */          
     pthread_setspecific(tls_memory_error, (void*)0);              
     /* Make temporary copies of misaligned arrays if needed. */
