@@ -7,10 +7,9 @@
 #include "Python.h"
 
 #include "numpy/arrayobject.h"
-// Uncomment these three includes when building NumPy:
-//#include "npy_config.h"
-//#include "npy_pycompat.h"
-//#include "common.h"
+#include "npy_config.h"
+#include "npy_pycompat.h"
+#include "common.h"
 #include "ufunc_override.h"
 #ifndef CBLAS_HEADER
 #define CBLAS_HEADER "cblas.h"
@@ -24,8 +23,6 @@
 #ifdef APPLE_ACCELERATE_SGEMV_PATCH
 #include <pthread.h>
 extern pthread_key_t tls_memory_error;
-// Comment out this define when building NumPy:
-#define not_aligned(x,y,z,w) PyErr_SetString(PyExc_ValueError, "matrices are not aligned")
 #endif
 
 static char module_doc[] =
