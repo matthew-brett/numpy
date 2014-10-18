@@ -1,15 +1,11 @@
 #ifdef APPLE_ACCELERATE_SGEMV_PATCH  
 
-/*
- * 
- * This is an ugly hack to circumvent a bug in Accelerate's cblas_sgemv.
+/* This is an ugly hack to circumvent a bug in Accelerate's cblas_sgemv.
  *
- * See:
- * https://github.com/numpy/numpy/issues/4007
+ * See: https://github.com/numpy/numpy/issues/4007
  *
  */ 
- 
- 
+  
 #define NPY_NO_DEPRECATED_API NPY_API_VERSION
 #include "Python.h"
 #include "numpy/arrayobject.h"
@@ -20,11 +16,8 @@
 #include <stdlib.h>
 #include <pthread.h>
 
-
 enum CBLAS_ORDER {CblasRowMajor=101, CblasColMajor=102};
 enum CBLAS_TRANSPOSE {CblasNoTrans=111, CblasTrans=112, CblasConjTrans=113};
-
-
 
 /* ----------------------------------------------------------------- */
 /* Management of aligned memory */
@@ -41,7 +34,7 @@ static void *aligned_malloc(size_t size, int align)
     void *ptr;
     if (NPY_UNLIKELY(posix_memalign(&ptr, align, size))) 
         return NULL;
-	return ptr;
+    return ptr;
 }
 
 #define BADARRAY(x) (((npy_intp)(void*)x)%32)    
