@@ -5,10 +5,7 @@
  * This is an ugly hack to circumvent a bug in Accelerate's cblas_sgemv.
  *
  * See:
- * https://github.com/numpy/numpy/issues/4007#issuecomment-45541678
- *
- * (C) Sturla Molden, 2014 
- * This code is intended for demonstration purposes only.
+ * https://github.com/numpy/numpy/issues/4007
  *
  */ 
  
