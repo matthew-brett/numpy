@@ -20,11 +20,6 @@
 #include <limits.h>
 #include <stdio.h>
 
-#ifdef APPLE_ACCELERATE_SGEMV_PATCH
-#include <pthread.h>
-extern pthread_key_t tls_memory_error;
-#endif
-
 static char module_doc[] =
 "This module provides a BLAS optimized\nmatrix multiply, inner product and dot for numpy arrays";
 
@@ -396,7 +391,6 @@ dotblas_matrixproduct(PyObject *NPY_UNUSED(dummy), PyObject *args, PyObject* kwa
     PyArray_Descr *dtype;
     MatrixShape ap1shape, ap2shape;
     char* kwords[] = {"a", "b", "out", NULL };
-    int called_gemv = 0;
 
     if (cached_npy_dot == NULL) {
         module = PyImport_ImportModule("numpy.core._dotblas");
@@ -826,7 +820,6 @@ dotblas_matrixproduct(PyObject *NPY_UNUSED(dummy), PyObject *args, PyObject* kwa
         }
         ap2s = PyArray_STRIDE(ap2, 0) / PyArray_ITEMSIZE(ap2);
         gemv(typenum, Order, CblasNoTrans, ap1, lda, ap2, ap2s, ret);
-        called_gemv = 1;
         NPY_END_ALLOW_THREADS;
     }
     else if (ap1shape != _matrix && ap2shape == _matrix) {
@@ -859,7 +852,6 @@ dotblas_matrixproduct(PyObject *NPY_UNUSED(dummy), PyObject *args, PyObject* kwa
             ap1s = PyArray_STRIDE(ap1, 0) / PyArray_ITEMSIZE(ap1);
         }
         gemv(typenum, Order, CblasTrans, ap2, lda, ap1, ap1s, ret);
-        called_gemv = 1;
         NPY_END_ALLOW_THREADS;
     }
     else {
@@ -922,16 +914,7 @@ dotblas_matrixproduct(PyObject *NPY_UNUSED(dummy), PyObject *args, PyObject* kwa
         NPY_END_ALLOW_THREADS;
     }
 
-    #ifdef APPLE_ACCELERATE_SGEMV_PATCH
-    if (called_gemv && (typenum == NPY_FLOAT)) {
-        void *memerr = pthread_getspecific(tls_memory_error); 
-        if (memerr == (void*)1) {
-            PyErr_NoMemory();
-            goto fail;
-        }
-    }
-    #endif
-    
+
     Py_DECREF(ap1);
     Py_DECREF(ap2);
     return PyArray_Return(ret);
@@ -963,7 +946,6 @@ dotblas_innerproduct(PyObject *NPY_UNUSED(dummy), PyObject *args)
     npy_intp dimensions[NPY_MAXDIMS];
     PyTypeObject *subtype;
     double prior1, prior2;
-    int called_gemv = 0;
 
     if (!PyArg_ParseTuple(args, "OO", &op1, &op2)) return NULL;
 
@@ -1082,13 +1064,11 @@ dotblas_innerproduct(PyObject *NPY_UNUSED(dummy), PyObject *args)
         /* Matrix-vector multiplication -- Level 2 BLAS */
         lda = (PyArray_DIM(ap1, 1) > 1 ? PyArray_DIM(ap1, 1) : 1);
         gemv(typenum, CblasRowMajor, CblasNoTrans, ap1, lda, ap2, 1, ret);
-        called_gemv = 1;
     }
     else if (PyArray_NDIM(ap1) == 1 && PyArray_NDIM(ap2) == 2) {
         /* Vector matrix multiplication -- Level 2 BLAS */
         lda = (PyArray_DIM(ap2, 1) > 1 ? PyArray_DIM(ap2, 1) : 1);
         gemv(typenum, CblasRowMajor, CblasNoTrans, ap2, lda, ap1, 1, ret);
-        called_gemv = 1;
     }
     else { /* (PyArray_NDIM(ap1) == 2 && PyArray_NDIM(ap2) == 2) */
         /* Matrix matrix multiplication -- Level 3 BLAS */
@@ -1099,17 +1079,6 @@ dotblas_innerproduct(PyObject *NPY_UNUSED(dummy), PyObject *args)
              ap1, lda, ap2, ldb, ret);
     }
     NPY_END_ALLOW_THREADS
-        
-    #ifdef APPLE_ACCELERATE_SGEMV_PATCH
-    if (called_gemv && (typenum == NPY_FLOAT)) {
-        void *memerr = pthread_getspecific(tls_memory_error); 
-        if (memerr == (void*)1) {
-            PyErr_NoMemory();
-            goto fail;
-        }
-    }
-    #endif
-    
     Py_DECREF(ap1);
     Py_DECREF(ap2);
     return PyArray_Return(ret);
@@ -1284,4 +1253,3 @@ PyMODINIT_FUNC init_dotblas(void)
 
     return RETVAL;
 }
-
