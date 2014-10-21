@@ -128,7 +128,6 @@ void sgemv_( const char* trans, const int* m, const int* n,
              const float* X, const int* incX,
              const float* beta, float* Y, const int* incY )
 {
-    char str[2];
     const int use_sgemm = AVX_and_10_9 && (BADARRAY(A) || BADARRAY(X) || BADARRAY(Y));
 
     if (!use_sgemm) {
@@ -167,9 +166,7 @@ void sgemv_( const char* trans, const int* m, const int* n,
                 1, *m, *n, *alpha, X, *incX, A, *ldA, *beta, Y, *incY );
             break;
         default:
-            str[0] = *trans;
-            str[1] = 0;
-            cblas_xerbla(1, "SGEMV", "Illegal transpose setting: %s\n", str);
+            cblas_xerbla(1, "SGEMV", "Illegal transpose setting: %c\n", *trans);
     }
 }
 
