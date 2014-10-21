@@ -179,25 +179,58 @@ def test_npdot_segfault():
     # Test for float32 np.dot segfault
     # https://github.com/numpy/numpy/issues/4007
     
-    # This always segfaults when the sgevm alignment bug is present
+    # This always segfaults when the sgemv alignment bug is present
     
-    assert_equal(call([sys.executable, '-c',
-                       '\n'.join([ 'import numpy as np',
-                                   '',
-                                   'def aligned_array(N, align, dtype):',
-                                   '    d = dtype()',
-                                   '    tmp = np.zeros(N * d.nbytes + align, dtype=np.uint8)',
-                                   '    address = tmp.__array_interface__["data"][0]',
-                                   '    for offset in range(align):',
-                                   '        if (address + offset) % align == 0: break',
-                                   '    return tmp[offset:offset+N*d.nbytes].view(dtype=dtype)',
-                                   '',
-                                   'm = aligned_array(100,15,np.float32)',
-                                   's = aligned_array(10000,15,np.float32).reshape(100,100)',
-                                   'np.dot(s,m)'
-                                 ])
-                     ]),
-                 0)
-
+    script = """
+import numpy as np
+def aligned_array(N, align, dtype):
+    d = dtype()
+    tmp = np.zeros(N * d.nbytes + align, dtype=np.uint8)
+    address = tmp.__array_interface__["data"][0]
+    for offset in range(align):
+        if (address + offset) % align == 0: break
+    return tmp[offset:offset+N*d.nbytes].view(dtype=dtype)
+m = aligned_array(100,15,np.float32)
+s = aligned_array(10000,15,np.float32).reshape(100,100)
+np.dot(s,m)"""
     
+    assert_equal(call([sys.executable, '-c', script]),0)
+                                              
+    # test the sanity of np.dot after applying patch
+    
+    script = """
+import numpy as np
+from numpy.testing import assert_allclose
 
+for i in range(100):
+    m0 = np.random.rand(200)
+    s0 = np.random.rand(10000,200)
+    desired = np.dot(s0,m0).astype(np.float32)    
+    m1 = m0.astype(np.float32)
+    s1 = s0.astype(np.float32)
+    assert_allclose(np.dot(s1,m1),desired,atol=0.01)    
+    m = np.asfortranarray(m1)
+    s = np.asfortranarray(s1)
+    assert_allclose(np.dot(s,m),desired,atol=0.01) 
+    
+    m0 = np.random.rand(200)
+    s0 = np.random.rand(200,10000)
+    desired = np.dot(s0.T,m0).astype(np.float32)    
+    m1 = m0.astype(np.float32)
+    s1 = s0.astype(np.float32)
+    assert_allclose(np.dot(s1.T,m1),desired,atol=0.01)    
+    m = np.asfortranarray(m1)
+    s = np.asfortranarray(s1)
+    assert_allclose(np.dot(s.T,m),desired,atol=0.01) 
+    
+    m0 = np.random.rand(89)
+    s0 = np.random.rand(10000,89)
+    desired = np.dot(s0,m0).astype(np.float32)    
+    m1 = m0.astype(np.float32)
+    s1 = s0.astype(np.float32)
+    assert_allclose(np.dot(s1,m1),desired,atol=0.01)    
+    m = np.asfortranarray(m1)
+    s = np.asfortranarray(s1)
+    assert_allclose(np.dot(s,m),desired,atol=0.01)"""    
+    
+    assert_equal(call([sys.executable, '-c', script]),0)
