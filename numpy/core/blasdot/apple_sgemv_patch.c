@@ -15,8 +15,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#define BADARRAY(x) (((npy_intp)(void*)x) % 32)
-
 /* ----------------------------------------------------------------- */
 /* Original cblas_sgemv */
 
@@ -122,6 +120,8 @@ static void loadlib()
 
 /* ----------------------------------------------------------------- */
 /* Fortran SGEMV override */
+
+#define BADARRAY(x) (((npy_intp)(void*)x) % 32)
 
 void sgemv_( const char* trans, const int* m, const int* n,
              const float* alpha, const float* A, const int* ldA,
