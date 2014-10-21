@@ -174,63 +174,94 @@ def test_dot_override():
     
 def test_npdot_segfault():
     if sys.platform != 'darwin': return
-    from subprocess import call
     
     # Test for float32 np.dot segfault
     # https://github.com/numpy/numpy/issues/4007
     
-    # This always segfaults when the sgemv alignment bug is present
-    
-    script = """
-import numpy as np
-def aligned_array(N, align, dtype):
-    d = dtype()
-    tmp = np.zeros(N * d.nbytes + align, dtype=np.uint8)
-    address = tmp.__array_interface__["data"][0]
-    for offset in range(align):
-        if (address + offset) % align == 0: break
-    return tmp[offset:offset+N*d.nbytes].view(dtype=dtype)
-m = aligned_array(100,15,np.float32)
-s = aligned_array(10000,15,np.float32).reshape(100,100)
-np.dot(s,m)"""
-    
-    assert_equal(call([sys.executable, '-c', script]),0)
-                                              
-    # test the sanity of np.dot after applying patch
-    
-    script = """
-import numpy as np
-from numpy.testing import assert_allclose
+    def aligned_array(N, align, dtype):
+        d = dtype()
+        tmp = np.zeros(N * d.nbytes + align, dtype=np.uint8)
+        address = tmp.__array_interface__["data"][0]
+        for offset in range(align):
+            if (address + offset) % align == 0: break
+        return tmp[offset:offset+N*d.nbytes].view(dtype=dtype)
 
-for i in range(100):
+    m = aligned_array(100,15,np.float32)
+    s = aligned_array(10000,15,np.float32).reshape(100,100)
+    np.dot(s,m) # This always segfaults when the sgemv alignment bug is present
+                                                 
+    # test the sanity of np.dot after applying patch
+    # misaligned arrays trigger SGEMM
     m0 = np.random.rand(200)
     s0 = np.random.rand(10000,200)
-    desired = np.dot(s0,m0).astype(np.float32)    
-    m1 = m0.astype(np.float32)
-    s1 = s0.astype(np.float32)
-    assert_allclose(np.dot(s1,m1),desired,atol=0.01)    
-    m = np.asfortranarray(m1)
-    s = np.asfortranarray(s1)
-    assert_allclose(np.dot(s,m),desired,atol=0.01) 
+    m1 = aligned_array(200,15,np.float32)
+    m1[:] = m0
+    s1 = aligned_array(10000*200,15,np.float32).reshape((10000,200))
+    s2 = aligned_array(10000*200,15,np.float32).reshape((10000,200),order='F')
+    s1[:,:] = s0
+    s2[:,:] = s0
+    desired = np.dot(s0,m0).astype(np.float32)
+    assert_allclose(np.dot(s1,m1),desired,atol=0.01) 
+    assert_allclose(np.dot(s2,m1),desired,atol=0.01)
     
     m0 = np.random.rand(200)
     s0 = np.random.rand(200,10000)
-    desired = np.dot(s0.T,m0).astype(np.float32)    
-    m1 = m0.astype(np.float32)
-    s1 = s0.astype(np.float32)
-    assert_allclose(np.dot(s1.T,m1),desired,atol=0.01)    
-    m = np.asfortranarray(m1)
-    s = np.asfortranarray(s1)
-    assert_allclose(np.dot(s.T,m),desired,atol=0.01) 
+    m1 = aligned_array(200,15,np.float32)
+    m1[:] = m0
+    s1 = aligned_array(10000*200,15,np.float32).reshape((200,10000))
+    s2 = aligned_array(10000*200,15,np.float32).reshape((200,10000),order='F')
+    s1[:,:] = s0
+    s2[:,:] = s0
+    desired = np.dot(s0.T,m0).astype(np.float32)
+    assert_allclose(np.dot(s1.T,m1),desired,atol=0.01) 
+    assert_allclose(np.dot(s2.T,m1),desired,atol=0.01) 
     
     m0 = np.random.rand(89)
     s0 = np.random.rand(10000,89)
-    desired = np.dot(s0,m0).astype(np.float32)    
-    m1 = m0.astype(np.float32)
-    s1 = s0.astype(np.float32)
-    assert_allclose(np.dot(s1,m1),desired,atol=0.01)    
-    m = np.asfortranarray(m1)
-    s = np.asfortranarray(s1)
-    assert_allclose(np.dot(s,m),desired,atol=0.01)"""    
+    m1 = aligned_array(89,15,np.float32)
+    m1[:] = m0
+    s1 = aligned_array(10000*89,15,np.float32).reshape((10000,89))
+    s2 = aligned_array(10000*89,15,np.float32).reshape((10000,89),order='F')
+    s1[:,:] = s0
+    s2[:,:] = s0
+    desired = np.dot(s0,m0).astype(np.float32)
+    assert_allclose(np.dot(s1,m1),desired,atol=0.01) 
+    assert_allclose(np.dot(s2,m1),desired,atol=0.01)
+
+    # test the sanity of np.dot after applying patch
+    # 32 byte aligned arrays trigger SGEMV
+    m0 = np.random.rand(200)
+    s0 = np.random.rand(10000,200)
+    m1 = aligned_array(200,32,np.float32)
+    m1[:] = m0
+    s1 = aligned_array(10000*200,32,np.float32).reshape((10000,200))
+    s2 = aligned_array(10000*200,32,np.float32).reshape((10000,200),order='F')
+    s1[:,:] = s0
+    s2[:,:] = s0
+    desired = np.dot(s0,m0).astype(np.float32)
+    assert_allclose(np.dot(s1,m1),desired,atol=0.01) 
+    assert_allclose(np.dot(s2,m1),desired,atol=0.01)
     
-    assert_equal(call([sys.executable, '-c', script]),0)
+    m0 = np.random.rand(200)
+    s0 = np.random.rand(200,10000)
+    m1 = aligned_array(200,32,np.float32)
+    m1[:] = m0
+    s1 = aligned_array(10000*200,32,np.float32).reshape((200,10000))
+    s2 = aligned_array(10000*200,32,np.float32).reshape((200,10000),order='F')
+    s1[:,:] = s0
+    s2[:,:] = s0
+    desired = np.dot(s0.T,m0).astype(np.float32)
+    assert_allclose(np.dot(s1.T,m1),desired,atol=0.01) 
+    assert_allclose(np.dot(s2.T,m1),desired,atol=0.01) 
+    
+    m0 = np.random.rand(89)
+    s0 = np.random.rand(10000,89)
+    m1 = aligned_array(89,32,np.float32)
+    m1[:] = m0
+    s1 = aligned_array(10000*89,32,np.float32).reshape((10000,89))
+    s2 = aligned_array(10000*89,32,np.float32).reshape((10000,89),order='F')
+    s1[:,:] = s0
+    s2[:,:] = s0
+    desired = np.dot(s0,m0).astype(np.float32)
+    assert_allclose(np.dot(s1,m1),desired,atol=0.01) 
+    assert_allclose(np.dot(s2,m1),desired,atol=0.01)
