@@ -88,7 +88,6 @@ __attribute__((constructor))
 static void loadlib()
 /* automatically executed on module import */
 {
-    /* TODO: Better error handling than Py_FatalError */
     char errormsg[1024];
     int AVX, MAVERICKS;
     memset((void*)errormsg, 0, sizeof(errormsg));
