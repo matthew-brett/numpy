@@ -148,7 +148,7 @@ void sgemv_( const char* trans, const int* m, const int* n,
              const float* beta, float* Y, const int* incY )
 { 
     char str[2];
-    const int use_sgemm = AVX_and_10_9 && (BADARRAY(A) || BADARRAY(B) || BADARRAY(C));
+    const int use_sgemm = AVX_and_10_9 && (BADARRAY(A) || BADARRAY(X) || BADARRAY(Y));
     if (!use_sgemm) {
         /* Safe to use the original SGEMV */
         accelerate_sgemv(trans,m,n,alpha,A,ldA,X,incX,beta,Y,incY);
