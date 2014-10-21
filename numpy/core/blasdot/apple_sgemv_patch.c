@@ -13,6 +13,7 @@
 #include <string.h>
 #include <dlfcn.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #define BADARRAY(x) (((npy_intp)(void*)x) % 32)
 
