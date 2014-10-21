@@ -160,7 +160,7 @@ void sgemv_( const char* trans, const int* m, const int* n,
      * and we are running Mavericks.
      *
      * SGEMV allows vectors to be strided. SGEMM requires all arrays to be
-     * contiguous along the first dimension. To emulate striding with leading
+     * contiguous along the leading dimension. To emulate striding with leading
      * dimension argument we compute
      *
      *    Y = alpha * op(A) @ X + beta * Y
