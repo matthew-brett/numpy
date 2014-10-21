@@ -36,7 +36,6 @@ Library:
     Extension: _dotblas
         Sources:
             blasdot/_dotblas.c
-            blasdot/apple_sgemv_patch.c
     Extension: test_rational
         Sources:
             src/umath/test_rational.c.src
