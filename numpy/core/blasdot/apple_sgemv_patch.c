@@ -163,13 +163,13 @@ void sgemv_( const char* trans, const int* m, const int* n,
      * contiguous along the first dimension. To emulate striding with leading
      * dimension argument we compute
      *
-     *    C = alpha * op(A) * B + beta * C
+     *    Y = alpha * op(A) @ X + beta * Y
      *
      * as
      *
-     *    C.T = alpha * B.T * op(A).T + beta * C.T
+     *    Y.T = alpha * X.T @ op(A).T + beta * Y.T
      *
-     * Since B.T and C.T are row vectors, their leading dimension in
+     * Since X.T and Y.T are row vectors, their leading dimension in
      * SGEMM becomes equal to their stride in SGEMV. */
 
     switch (*trans) {
@@ -188,7 +188,7 @@ void sgemv_( const char* trans, const int* m, const int* n,
         default:
             str[0] = *trans;
             str[1] = 0;
-            cblas_xerbla(1, "SGEMV", "Illegal order setting: %s\n", str);
+            cblas_xerbla(1, "SGEMV", "Illegal transpose setting: %s\n", str);
     }
 }
 
