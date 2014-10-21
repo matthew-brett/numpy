@@ -12,7 +12,6 @@
 
 #include <string.h>
 #include <dlfcn.h>
-#include <stdio.h>
 #include <stdlib.h>
 
 #define BADARRAY(x) (((npy_intp)(void*)x) % 32)
@@ -50,34 +49,16 @@ static cblas_sgemm_t *accelerate_cblas_sgemm = NULL;
 static fortran_sgemv_t *accelerate_sgemv = NULL;
 static int AVX_and_10_9 = 0;
 
-static int cpu_supports_avx(void)
 /* Dynamic check for AVX support
  * __builtin_cpu_supports("avx") is available in gcc 4.8,
  * but clang and icc do not currently support it. */
-{
-    char tmp[1024];
-    FILE *p;
-    size_t count;
-    p = popen("sysctl -n machdep.cpu.features | grep AVX", "r");
-    if (p == NULL) return -1;
-    count = fread((void *)&tmp, 1, sizeof(tmp)-1, p);
-    pclose(p);
-    return (count ? 1 : 0);
-}
+#define cpu_supports_avx()\
+(system("sysctl -n machdep.cpu.features | grep -q AVX") == 0)
 
-static int using_mavericks(void)
-/* Check if we are using MacOS X 10.9 */
-{
-    char tmp[1024];
-    FILE *p;
-    size_t count;
-    p = popen("sw_vers -productVersion | grep 10\\.9\\.", "r");
-    if (p == NULL) return -1;
-    count = fread((void *)&tmp, 1, sizeof(tmp)-1, p);
-    pclose(p);
-    return (count ? 1 : 0);
-}
-
+/* Check if we are using MacOS X version 10.9 */
+#define using_mavericks()\
+(system("sw_vers -productVersion | grep -q 10\\.9\\.") == 0) 
+ 
 __attribute__((destructor))
 static void unloadlib(void)
 {
