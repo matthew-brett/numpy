@@ -199,7 +199,7 @@ def test_npdot_segfault():
         return aligned
 
     def assert_dot_close(A, X, desired):
-        assert_allclose(np.dot(A, X), desired, rtol=1e-6, atol=1e-9)
+        assert_allclose(np.dot(A, X), desired, rtol=1e-5, atol=1e-9)
 
     m = aligned_array(100, 15, np.float32)
     s = aligned_array((100, 100), 15, np.float32)
