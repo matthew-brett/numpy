@@ -1,7 +1,9 @@
 from __future__ import division, absolute_import, print_function
 
-import numpy as np
 import sys
+from itertools import product
+
+import numpy as np
 from numpy.core import zeros, float64
 from numpy.testing import dec, TestCase, assert_almost_equal, assert_, \
      assert_raises, assert_array_equal, assert_allclose, assert_equal
@@ -190,26 +192,58 @@ def test_npdot_segfault():
         tmp = tmp[offset:offset+N*d.nbytes].view(dtype=dtype)
         return tmp.reshape(shape, order=order)
 
+    def as_aligned(arr, align, dtype, order='C'):
+        # Copy `arr` into an aligned array with same shape
+        aligned = aligned_array(arr.shape, align, dtype, order)
+        aligned[:] = arr[:]
+        return aligned
+
+    def assert_dot_close(A, X, desired):
+        assert_allclose(np.dot(A, X), desired, rtol=1e-6, atol=1e-9)
+
     m = aligned_array(100, 15, np.float32)
     s = aligned_array((100, 100), 15, np.float32)
     # This always segfaults when the sgemv alignment bug is present
     np.dot(s, m)
     # test the sanity of np.dot after applying patch
-    for align in (15, 32):
-        for m, n, trans in ((10000, 200, False),
-                            (10000, 200, True),
-                            (10000, 89, True)):
-            m0 = np.random.rand(n)
-            s_shape = (n, m) if trans else (m, n)
-            s0 = np.random.rand(*s_shape)
-            m1 = aligned_array(n, align, np.float32)
-            m1[:] = m0
-            s1 = aligned_array(s_shape, align, np.float32)
-            s2 = aligned_array(s_shape, align, np.float32 ,order='F')
-            s1[:, :] = s0
-            s2[:, :] = s0
-            if trans:
-                s0, s1, s2 = s0.T, s1.T, s2.T
-            desired = np.dot(s0, m0).astype(np.float32)
-            assert_allclose(np.dot(s1, m1), desired, rtol=1e-5, atol=1e-5)
-            assert_allclose(np.dot(s2, m1), desired, rtol=1e-5, atol=1e-5)
+    for align, m, n, a_order in product(
+        (15, 32),
+        (10000,),
+        (200, 89),
+        ('C', 'F')):
+        # Calculation in double precision
+        A_d = np.random.rand(m, n)
+        X_d = np.random.rand(n)
+        desired = np.dot(A_d, X_d)
+        # Calculation with aligned single precision
+        A_f = as_aligned(A_d, align, np.float32, order=a_order)
+        X_f = as_aligned(X_d, align, np.float32)
+        assert_dot_close(A_f, X_f, desired)
+        # Strided A rows
+        A_d_2 = A_d[::2]
+        desired = np.dot(A_d_2, X_d)
+        A_f_2 = A_f[::2]
+        assert_dot_close(A_f_2, X_f, desired)
+        # Strided A columns, strided X vector
+        A_d_22 = A_d_2[:, ::2]
+        X_d_2 = X_d[::2]
+        desired = np.dot(A_d_22, X_d_2)
+        A_f_22 = A_f_2[:, ::2]
+        X_f_2 = X_f[::2]
+        assert_dot_close(A_f_22, X_f_2, desired)
+        # Check the strides are as expected
+        if a_order == 'F':
+            assert_equal(A_f_22.strides, (8, 8 * m))
+        else:
+            assert_equal(A_f_22.strides, (8 * n, 8))
+        assert_equal(X_f_2.strides, (8,))
+        # Strides in A rows + cols only
+        X_f_2c = as_aligned(X_f_2, align, np.float32)
+        assert_dot_close(A_f_22, X_f_2c, desired)
+        # Strides just in A cols
+        A_d_12 = A_d[:, ::2]
+        desired = np.dot(A_d_12, X_d_2)
+        A_f_12 = A_f[:, ::2]
+        assert_dot_close(A_f_12, X_f_2c, desired)
+        # Strides in A cols and X
+        assert_dot_close(A_f_12, X_f_2, desired)
