@@ -1,0 +1,12 @@
+NumPy 1.9.3 Release Notes
+*************************
+
+This is a bugfix only release in the 1.9.x series.
+
+Issues fixed
+============
+
+* `#5866 <https://github.com/numpy/numpy/pull/5866>`__: fix error finding
+  Python headers when ``build_ext`` ``--include-dirs`` is set;
+* `#6016 <https://github.com/numpy/numpy/pull/6016>`__: fix ``np.loadtxt``
+  error on Python 3.5 when reading from gzip files.
